@@ -9,9 +9,13 @@ import SwiftUI
 
 @main
 struct MovingWallpaperApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            PreferencesView()
         }
+        .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 500, height: 400)
     }
 }
