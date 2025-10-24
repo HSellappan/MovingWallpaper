@@ -13,7 +13,8 @@ class WallpaperManager {
     private let logger = Logger(subsystem: "com.movingwallpaper", category: "WallpaperManager")
 
     private var desktopWindows: [DesktopWindow] = []
-    private var players: [AVPlayer] = []
+    private var players: [AVQueuePlayer] = []
+    private var playerLoopers: [AVPlayerLooper] = []
     private var videoURL: URL?
 
     init() {
@@ -86,15 +87,17 @@ class WallpaperManager {
             let window = DesktopWindow(for: screen)
 
             if let videoURL = videoURL {
-                // Create player for this screen
-                let player = createPlayer(for: videoURL)
+                // Create player and looper for this screen
+                let (player, looper) = createLoopingPlayer(for: videoURL)
                 let playerLayer = AVPlayerLayer(player: player)
 
                 window.setPlayerLayer(playerLayer)
                 players.append(player)
+                playerLoopers.append(looper)
 
                 // Start playing
                 player.play()
+                logger.info("Started playback on screen")
             } else {
                 // Show fallback background
                 window.setFallbackBackground()
@@ -106,24 +109,23 @@ class WallpaperManager {
         logger.info("Desktop windows setup complete")
     }
 
-    private func createPlayer(for url: URL) -> AVPlayer {
+    private func createLoopingPlayer(for url: URL) -> (AVQueuePlayer, AVPlayerLooper) {
+        // Create a player item for the video
         let playerItem = AVPlayerItem(url: url)
-        let player = AVPlayer(playerItem: playerItem)
+
+        // Create a queue player (required for AVPlayerLooper)
+        let player = AVQueuePlayer(playerItem: playerItem)
 
         // Mute audio
         player.isMuted = true
 
-        // Setup looping
-        NotificationCenter.default.addObserver(
-            forName: .AVPlayerItemDidPlayToEndTime,
-            object: playerItem,
-            queue: .main
-        ) { [weak player] _ in
-            player?.seek(to: .zero)
-            player?.play()
-        }
+        // Create the looper for seamless looping
+        // AVPlayerLooper automatically handles repeating the video
+        let looper = AVPlayerLooper(player: player, templateItem: playerItem)
 
-        return player
+        logger.info("Created looping player for video: \(url.lastPathComponent)")
+
+        return (player, looper)
     }
 
     @objc private func screenParametersChanged(_ notification: Notification) {
@@ -153,6 +155,12 @@ class WallpaperManager {
             player.pause()
         }
         players.removeAll()
+
+        // Disable all loopers (important to prevent memory leaks)
+        for looper in playerLoopers {
+            looper.disableLooping()
+        }
+        playerLoopers.removeAll()
 
         // Close all windows
         for window in desktopWindows {
