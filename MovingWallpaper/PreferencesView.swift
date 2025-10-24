@@ -7,6 +7,7 @@
 
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 struct PreferencesView: View {
     @ObservedObject private var settings = WallpaperSettings.shared
