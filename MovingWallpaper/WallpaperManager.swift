@@ -110,20 +110,24 @@ class WallpaperManager {
     }
 
     private func createLoopingPlayer(for url: URL) -> (AVQueuePlayer, AVPlayerLooper) {
-        // Create an asset for better performance
+        // Create an asset
         let asset = AVAsset(url: url)
 
         // Create a player item from the asset
         let playerItem = AVPlayerItem(asset: asset)
 
-        // Create an empty queue player (don't add items manually)
+        // Configure player item for optimal buffering
+        playerItem.preferredForwardBufferDuration = 10.0 // Increase buffer
+
+        // Create an empty queue player
         let player = AVQueuePlayer()
 
-        // Mute audio
+        // Configure player for seamless playback
         player.isMuted = true
+        player.actionAtItemEnd = .none // Critical: Don't pause at end
 
-        // Create the looper with the queue player and template item
-        // AVPlayerLooper will automatically manage the queue for seamless looping
+        // Create the looper - it will handle the time range automatically
+        // Using the basic initializer for better compatibility
         let looper = AVPlayerLooper(player: player, templateItem: playerItem)
 
         logger.info("Created looping player for video: \(url.lastPathComponent)")
