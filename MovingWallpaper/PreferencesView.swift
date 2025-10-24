@@ -2,14 +2,16 @@
 //  PreferencesView.swift
 //  MovingWallpaper
 //
-//  Stub SwiftUI settings view showing detected displays.
+//  SwiftUI settings view showing detected displays and video selection.
 //
 
 import SwiftUI
+import AppKit
 
 struct PreferencesView: View {
+    @ObservedObject private var settings = WallpaperSettings.shared
     @State private var detectedDisplays: [String] = []
-    @State private var hasVideo: Bool = false
+    @State private var currentVideoPath: String = "None"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -41,42 +43,44 @@ struct PreferencesView: View {
 
             Divider()
 
-            // Video status section
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Video Status")
-                    .font(.headline)
-
-                HStack {
-                    Image(systemName: hasVideo ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                        .foregroundColor(hasVideo ? .green : .orange)
-                    Text(hasVideo ? "wallpaper.mp4 loaded" : "wallpaper.mp4 not found (showing fallback)")
-                        .font(.body)
-                }
-
-                Text("To add a video: Place wallpaper.mp4 in the app bundle's Resources folder")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.top, 4)
-            }
-
-            Divider()
-
-            // File picker placeholder (disabled for now)
+            // Video selection section
             VStack(alignment: .leading, spacing: 8) {
                 Text("Video Selection")
                     .font(.headline)
 
-                Button(action: {
-                    // Placeholder: File picker will be implemented in future PR
-                }) {
-                    HStack {
-                        Image(systemName: "folder")
-                        Text("Choose Video File...")
+                HStack {
+                    Image(systemName: settings.customVideoURL != nil ? "checkmark.circle.fill" : "video.circle")
+                        .foregroundColor(settings.customVideoURL != nil ? .green : .blue)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Current video:")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text(currentVideoPath)
+                            .font(.system(.body, design: .monospaced))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
                     }
                 }
-                .disabled(true)
 
-                Text("Video file selection coming in a future update")
+                HStack(spacing: 12) {
+                    Button(action: chooseVideoFile) {
+                        HStack {
+                            Image(systemName: "folder")
+                            Text("Choose MP4 File...")
+                        }
+                    }
+
+                    if settings.customVideoURL != nil {
+                        Button(action: clearCustomVideo) {
+                            HStack {
+                                Image(systemName: "arrow.counterclockwise")
+                                Text("Reset to Default")
+                            }
+                        }
+                    }
+                }
+
+                Text("Select a custom MP4 video file to use as your wallpaper")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -84,23 +88,52 @@ struct PreferencesView: View {
             Spacer()
         }
         .padding(24)
-        .frame(width: 500, height: 400)
+        .frame(width: 550, height: 400)
         .onAppear {
             refreshDisplayInfo()
+            updateCurrentVideoPath()
+        }
+        .onChange(of: settings.customVideoURL) { _ in
+            updateCurrentVideoPath()
         }
     }
 
     private func refreshDisplayInfo() {
-        // Access the wallpaper manager to get display info
-        // Since we don't have direct access here, we'll use NSScreen directly
         detectedDisplays = NSScreen.screens.enumerated().map { index, screen in
             let frame = screen.frame
             let scale = screen.backingScaleFactor
             return "Display \(index + 1): \(Int(frame.width))x\(Int(frame.height)) @\(scale)x"
         }
+    }
 
-        // Check if video exists
-        hasVideo = Bundle.main.url(forResource: "wallpaper", withExtension: "mp4") != nil
+    private func updateCurrentVideoPath() {
+        if let customURL = settings.customVideoURL {
+            currentVideoPath = customURL.path
+        } else if let bundledURL = Bundle.main.url(forResource: "wallpaper", withExtension: "mp4") {
+            currentVideoPath = "Bundled: \(bundledURL.lastPathComponent)"
+        } else {
+            currentVideoPath = "None (showing fallback background)"
+        }
+    }
+
+    private func chooseVideoFile() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose a video file"
+        panel.message = "Select an MP4 video file to use as your moving wallpaper"
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowedContentTypes = [.mpeg4Movie]
+
+        panel.begin { response in
+            if response == .OK, let url = panel.url {
+                settings.customVideoURL = url
+            }
+        }
+    }
+
+    private func clearCustomVideo() {
+        settings.clearCustomVideo()
     }
 }
 

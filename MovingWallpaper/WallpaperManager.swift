@@ -19,13 +19,13 @@ class WallpaperManager {
     init() {
         logger.info("Initializing WallpaperManager")
 
-        // Find the video file in the bundle
+        // Find the video file (custom or bundled)
         videoURL = findVideoFile()
 
         if videoURL != nil {
             logger.info("Video file found, will play wallpaper")
         } else {
-            logger.warning("No wallpaper.mp4 found in bundle, will show fallback background")
+            logger.warning("No video found, will show fallback background")
         }
 
         // Setup windows for all current screens
@@ -38,16 +38,37 @@ class WallpaperManager {
             name: NSApplication.didChangeScreenParametersNotification,
             object: nil
         )
+
+        // Listen for video URL changes
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(videoURLDidChange),
+            name: .videoURLDidChange,
+            object: nil
+        )
     }
 
     private func findVideoFile() -> URL? {
-        // Try to find wallpaper.mp4 in the main bundle
+        // First, check if user has selected a custom video
+        if let customURL = WallpaperSettings.shared.customVideoURL {
+            if FileManager.default.fileExists(atPath: customURL.path) {
+                logger.info("Using custom video: \(customURL.path)")
+                return customURL
+            } else {
+                logger.warning("Custom video no longer exists, clearing preference")
+                WallpaperSettings.shared.clearCustomVideo()
+            }
+        }
+
+        // Fall back to bundled wallpaper.mp4
         if let url = Bundle.main.url(forResource: "wallpaper", withExtension: "mp4") {
+            logger.info("Using bundled video")
             return url
         }
 
         // Also check in Assets if it was added there
         if let url = Bundle.main.url(forResource: "wallpaper", withExtension: "mp4", subdirectory: "Assets") {
+            logger.info("Using bundled video from Assets")
             return url
         }
 
@@ -112,6 +133,16 @@ class WallpaperManager {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             self?.setupDesktopWindows()
         }
+    }
+
+    @objc private func videoURLDidChange(_ notification: Notification) {
+        logger.info("Video URL changed, reloading wallpaper")
+
+        // Update video URL
+        videoURL = findVideoFile()
+
+        // Reload all windows with new video
+        setupDesktopWindows()
     }
 
     func cleanup() {
