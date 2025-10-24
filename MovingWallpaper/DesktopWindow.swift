@@ -9,12 +9,9 @@ import Cocoa
 import AVFoundation
 
 class DesktopWindow: NSWindow {
-    let screen: NSScreen
     var playerLayer: AVPlayerLayer?
 
     init(for screen: NSScreen) {
-        self.screen = screen
-
         // Initialize window with screen frame
         super.init(
             contentRect: screen.frame,
@@ -70,6 +67,7 @@ class DesktopWindow: NSWindow {
 
     func updateFrame() {
         // Update window frame to match screen (handles resolution changes)
+        guard let screen = self.screen else { return }
         self.setFrame(screen.frame, display: true)
         playerLayer?.frame = self.contentView?.bounds ?? .zero
     }
