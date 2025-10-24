@@ -17,9 +17,11 @@ class DesktopWindow: NSWindow {
             contentRect: screen.frame,
             styleMask: .borderless,
             backing: .buffered,
-            defer: false,
-            screen: screen
+            defer: false
         )
+
+        // Set the screen after initialization
+        self.screen = screen
 
         // Configure window properties
         self.level = .init(Int(CGWindowLevelForKey(.desktopWindow)))
