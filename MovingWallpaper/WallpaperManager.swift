@@ -13,19 +13,20 @@ class WallpaperManager {
     private let logger = Logger(subsystem: "com.movingwallpaper", category: "WallpaperManager")
 
     private var desktopWindows: [DesktopWindow] = []
-    private var players: [AVPlayer] = []
+    private var players: [AVQueuePlayer] = []
+    private var playerLoopers: [AVPlayerLooper] = []
     private var videoURL: URL?
 
     init() {
         logger.info("Initializing WallpaperManager")
 
-        // Find the video file in the bundle
+        // Find the video file (custom or bundled)
         videoURL = findVideoFile()
 
         if videoURL != nil {
             logger.info("Video file found, will play wallpaper")
         } else {
-            logger.warning("No wallpaper.mp4 found in bundle, will show fallback background")
+            logger.warning("No video found, will show fallback background")
         }
 
         // Setup windows for all current screens
@@ -38,16 +39,37 @@ class WallpaperManager {
             name: NSApplication.didChangeScreenParametersNotification,
             object: nil
         )
+
+        // Listen for video URL changes
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(videoURLDidChange),
+            name: .videoURLDidChange,
+            object: nil
+        )
     }
 
     private func findVideoFile() -> URL? {
-        // Try to find wallpaper.mp4 in the main bundle
+        // First, check if user has selected a custom video
+        if let customURL = WallpaperSettings.shared.customVideoURL {
+            if FileManager.default.fileExists(atPath: customURL.path) {
+                logger.info("Using custom video: \(customURL.path)")
+                return customURL
+            } else {
+                logger.warning("Custom video no longer exists, clearing preference")
+                WallpaperSettings.shared.clearCustomVideo()
+            }
+        }
+
+        // Fall back to bundled wallpaper.mp4
         if let url = Bundle.main.url(forResource: "wallpaper", withExtension: "mp4") {
+            logger.info("Using bundled video")
             return url
         }
 
         // Also check in Assets if it was added there
         if let url = Bundle.main.url(forResource: "wallpaper", withExtension: "mp4", subdirectory: "Assets") {
+            logger.info("Using bundled video from Assets")
             return url
         }
 
@@ -65,15 +87,17 @@ class WallpaperManager {
             let window = DesktopWindow(for: screen)
 
             if let videoURL = videoURL {
-                // Create player for this screen
-                let player = createPlayer(for: videoURL)
+                // Create player and looper for this screen
+                let (player, looper) = createLoopingPlayer(for: videoURL)
                 let playerLayer = AVPlayerLayer(player: player)
 
                 window.setPlayerLayer(playerLayer)
                 players.append(player)
+                playerLoopers.append(looper)
 
                 // Start playing
                 player.play()
+                logger.info("Started playback on screen")
             } else {
                 // Show fallback background
                 window.setFallbackBackground()
@@ -85,24 +109,30 @@ class WallpaperManager {
         logger.info("Desktop windows setup complete")
     }
 
-    private func createPlayer(for url: URL) -> AVPlayer {
-        let playerItem = AVPlayerItem(url: url)
-        let player = AVPlayer(playerItem: playerItem)
+    private func createLoopingPlayer(for url: URL) -> (AVQueuePlayer, AVPlayerLooper) {
+        // Create an asset
+        let asset = AVAsset(url: url)
 
-        // Mute audio
+        // Create a player item from the asset
+        let playerItem = AVPlayerItem(asset: asset)
+
+        // Configure player item for optimal buffering
+        playerItem.preferredForwardBufferDuration = 10.0 // Increase buffer
+
+        // Create an empty queue player
+        let player = AVQueuePlayer()
+
+        // Configure player for seamless playback
         player.isMuted = true
+        player.actionAtItemEnd = .none // Critical: Don't pause at end
 
-        // Setup looping
-        NotificationCenter.default.addObserver(
-            forName: .AVPlayerItemDidPlayToEndTime,
-            object: playerItem,
-            queue: .main
-        ) { [weak player] _ in
-            player?.seek(to: .zero)
-            player?.play()
-        }
+        // Create the looper - it will handle the time range automatically
+        // Using the basic initializer for better compatibility
+        let looper = AVPlayerLooper(player: player, templateItem: playerItem)
 
-        return player
+        logger.info("Created looping player for video: \(url.lastPathComponent)")
+
+        return (player, looper)
     }
 
     @objc private func screenParametersChanged(_ notification: Notification) {
@@ -114,6 +144,16 @@ class WallpaperManager {
         }
     }
 
+    @objc private func videoURLDidChange(_ notification: Notification) {
+        logger.info("Video URL changed, reloading wallpaper")
+
+        // Update video URL
+        videoURL = findVideoFile()
+
+        // Reload all windows with new video
+        setupDesktopWindows()
+    }
+
     func cleanup() {
         logger.info("Cleaning up WallpaperManager")
 
@@ -122,6 +162,12 @@ class WallpaperManager {
             player.pause()
         }
         players.removeAll()
+
+        // Disable all loopers (important to prevent memory leaks)
+        for looper in playerLoopers {
+            looper.disableLooping()
+        }
+        playerLoopers.removeAll()
 
         // Close all windows
         for window in desktopWindows {

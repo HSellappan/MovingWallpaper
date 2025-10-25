@@ -9,19 +9,18 @@ import Cocoa
 import AVFoundation
 
 class DesktopWindow: NSWindow {
-    let screen: NSScreen
     var playerLayer: AVPlayerLayer?
+    private weak var targetScreen: NSScreen?
 
     init(for screen: NSScreen) {
-        self.screen = screen
+        self.targetScreen = screen
 
         // Initialize window with screen frame
         super.init(
             contentRect: screen.frame,
             styleMask: .borderless,
             backing: .buffered,
-            defer: false,
-            screen: screen
+            defer: false
         )
 
         // Configure window properties
@@ -35,6 +34,9 @@ class DesktopWindow: NSWindow {
 
         // Setup content view
         setupContentView()
+
+        // Ensure window is on the correct screen by setting its frame
+        self.setFrame(screen.frame, display: true)
     }
 
     private func setupContentView() {
@@ -70,6 +72,7 @@ class DesktopWindow: NSWindow {
 
     func updateFrame() {
         // Update window frame to match screen (handles resolution changes)
+        guard let screen = targetScreen else { return }
         self.setFrame(screen.frame, display: true)
         playerLayer?.frame = self.contentView?.bounds ?? .zero
     }

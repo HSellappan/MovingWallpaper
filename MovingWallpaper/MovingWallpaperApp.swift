@@ -16,6 +16,6 @@ struct MovingWallpaperApp: App {
             PreferencesView()
         }
         .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: 500, height: 400)
+        .defaultSize(width: 550, height: 400)
     }
 }
